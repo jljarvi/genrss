@@ -6,10 +6,33 @@ Generate RSS from HTML.
 
 A Python script that extracts metadata and links from an HTML page and generates an RSS feed using the RSS 2.0 standard. It aims to be as verbose as possible, including metadata like Open Graph (_og:*_) and Twitter (_twitter:*_), images, descriptions, and publication dates (when available).
 
+## Installation
+
+```bash
+uv sync
+. ./.env
+```
+
 ## Usage
 
 ```bash
-python app.py <url>
+uv run src/app.py <url>
+```
+
+## File structure
+
+```bash
+.
+├── data
+│   └── <domain>.json   # JSON file containing the data on existing RSS entries for the given domain
+├── feeds
+│   └── <domain>.xml    # RSS feed for the given domain
+├── .env                # Environment variables
+├── pyproject.toml      # Project configuration
+├── README.md           # This file
+└── src
+    ├── app.py          # Main script
+    ├── __init__.py     # Package initialisation
 ```
 
 ## Disclaimer
