@@ -1,0 +1,11 @@
+[project]
+name = "genrss"
+version = "0.1.0"
+description = "Generate an RSS feed from URI input."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "beautifulsoup4>=4.13.3",
+    "feedgenerator>=2.1.0",
+    "requests>=2.32.3",
+]
