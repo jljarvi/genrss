@@ -1,10 +1,27 @@
+import os
 import sys
 import re
 from datetime import datetime, timezone
+import json
 import requests
 import feedgenerator
+from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 from xml.dom import minidom
+
+
+# Load the previously stored feed data (for incremental updates)
+def load_existing_entries(feed_path):
+    if os.path.exists(feed_path):
+        with open(feed_path, 'r') as f:
+            return json.load(f)
+    return {}
+
+
+# Save the current feed data (to avoid adding duplicate entries)
+def save_entries(feed_path, entries):
+    with open(feed_path, 'w') as f:
+        json.dump(entries, f)
 
 
 def parse_date(date_str):
@@ -13,6 +30,7 @@ def parse_date(date_str):
         return datetime.strptime(date_str, "%B %d, %Y").replace(tzinfo=timezone.utc)
     except ValueError:
         return datetime.now(timezone.utc)
+
 
 def extract_blog_posts(url):
     response = requests.get(url)
@@ -107,6 +125,7 @@ def extract_blog_posts(url):
     
     return articles
 
+
 def generate_rss(feed_title, feed_link, feed_description, articles):
     # Clean up article content by removing excessive whitespace
     for article in articles:
@@ -139,55 +158,103 @@ def generate_rss(feed_title, feed_link, feed_description, articles):
     parsed = minidom.parseString(xml_str)
     return parsed.toprettyxml(indent="  ", encoding='utf-8').decode('utf-8')
 
+
 if __name__ == "__main__":
     url = sys.argv[1] if len(sys.argv) > 1 else "https://ollama.com/blog"
     
     try:
-        # Get the site name from either the title tag or domain
-        response = requests.get(url)
-        soup = BeautifulSoup(response.text, 'html.parser')
+        # Create data and feeds directories if they don't exist
+        os.makedirs('../data', exist_ok=True)
+        os.makedirs('../feeds', exist_ok=True)
         
-        # Try to get site name from title tag
-        title_tag = soup.find('title')
-        site_name = None
-        if title_tag:
-            # Clean up common title patterns
-            site_title = title_tag.string.strip()
+        # Create filenames from the URL
+        domain = urlparse(url).netloc.replace('www.', '')
+        feed_file = os.path.join('../feeds', f"{domain.split('.')[0]}.xml")
+        data_file = os.path.join('../data', f"{domain.split('.')[0]}.json")
+        
+        # Load existing entries
+        existing_entries = load_existing_entries(data_file)
+        
+        # If this is a new feed, generate the title
+        if not existing_entries:
+            # Get the site name from either the title tag or domain
+            response = requests.get(url)
+            soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Remove common suffixes and prefixes
-            site_title = re.split(r'[-|·•]|\s+[—–-]\s+|\b(?:Blog|Home|Website)\b', site_title)[0].strip()
+            # Try to get site name from title tag
+            title_tag = soup.find('title')
+            site_name = None
+            if title_tag:
+                # Clean up common title patterns
+                site_title = title_tag.string.strip()
+                
+                # Remove common suffixes and prefixes
+                site_title = re.split(r'[-|·•]|\s+[—–-]\s+|\b(?:Blog|Home|Website)\b', site_title)[0].strip()
+                
+                # If title starts with "Blog", try to find a better name
+                if site_title.lower().startswith('blog'):
+                    # Try meta tags first
+                    meta_title = soup.find('meta', property=['og:site_name', 'twitter:title'])
+                    if meta_title and meta_title.get('content'):
+                        site_title = meta_title['content'].strip()
+                    else:
+                        # Remove "Blog" from start if it's there
+                        site_title = re.sub(r'^Blog\s*[-|·•]?\s*', '', site_title)
+                
+                site_name = site_title
             
-            # If title starts with "Blog", try to find a better name
-            if site_title.lower().startswith('blog'):
-                # Try meta tags first
-                meta_title = soup.find('meta', property=['og:site_name', 'twitter:title'])
-                if meta_title and meta_title.get('content'):
-                    site_title = meta_title['content'].strip()
-                else:
-                    # Remove "Blog" from start if it's there
-                    site_title = re.sub(r'^Blog\s*[-|·•]?\s*', '', site_title)
+            # If no title found or title is too generic, use domain name
+            if not site_name or site_name.lower() in ['blog', 'home', 'website']:
+                site_name = domain.split('.')[0].title()
             
-            site_name = site_title
+            # Clean up any remaining whitespace or punctuation
+            site_name = site_name.strip('- |·•').strip()
+            
+            # Store the feed title
+            existing_entries['feed_title'] = f"{site_name} Blog Feed"
+            existing_entries['feed_description'] = f"RSS feed generated from {url}"
+            existing_entries['entries'] = {}
         
-        # If no title found or title is too generic, use domain name
-        if not site_name or site_name.lower() in ['blog', 'home', 'website']:
-            from urllib.parse import urlparse
-            domain = urlparse(url).netloc
-            site_name = domain.replace('www.', '').split('.')[0].title()
-        
-        # Clean up any remaining whitespace or punctuation
-        site_name = site_name.strip('- |·•').strip()
-        
+        # Get new articles
         articles = extract_blog_posts(url)
         if articles:
-            feed_title = f"{site_name} Blog Feed"
+            # Only add new articles that we haven't seen before
+            new_articles = []
+            for article in articles:
+                if article['link'] not in existing_entries['entries']:
+                    new_articles.append(article)
+                    existing_entries['entries'][article['link']] = {
+                        'title': article['title'],
+                        'description': article['description'],
+                        'pub_date': article['pub_date'].isoformat(),
+                        'author': article.get('author')
+                    }
             
+            # Convert stored entries back to articles format
+            all_articles = []
+            for link, data in existing_entries['entries'].items():
+                all_articles.append({
+                    'title': data['title'],
+                    'description': data['description'],
+                    'link': link,
+                    'pub_date': datetime.fromisoformat(data['pub_date']),
+                    'author': data.get('author')
+                })
+            
+            # Generate the RSS feed with all articles
             rss_feed = generate_rss(
-                feed_title,
+                existing_entries['feed_title'],
                 url,
-                f"RSS feed generated from {url}",
-                articles
+                existing_entries['feed_description'],
+                all_articles
             )
+            
+            # Save the updated entries
+            save_entries(data_file, existing_entries)
+            
+            # Save the RSS feed to file and print to stdout
+            with open(feed_file, 'w', encoding='utf-8') as f:
+                f.write(rss_feed)
             print(rss_feed)
         else:
             print("No blog posts found at the specified URL.")

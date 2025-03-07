@@ -1,6 +1,10 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "genrss"
-version = "0.1.0"
+version = "0.2.0"
 description = "Generate an RSS feed from URI input."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -9,3 +13,6 @@ dependencies = [
     "feedgenerator>=2.1.0",
     "requests>=2.32.3",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
