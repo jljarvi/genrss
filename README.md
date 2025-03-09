@@ -24,15 +24,20 @@ uv run src/app.py <url>
 ```bash
 .
 ├── data
-│   └── <domain>.json   # JSON file containing the data on existing RSS entries for the given domain
+│   └── <domain>.json          # JSON file containing the data on existing RSS entries for the given domain
 ├── feeds
-│   └── <domain>.xml    # RSS feed for the given domain
-├── .env                # Environment variables
-├── pyproject.toml      # Project configuration
-├── README.md           # This file
+│   └── <domain>.xml           # RSS feed for the given domain
+├── docs
+│   └── <domain>.xml           # Publicly accessible RSS feed for the given domain
+├── .env                       # Environment variables
+├── .github
+│   └── workflows
+│       └── generate-feeds.yml # GitHub Actions workflow for generating RSS feeds
+├── pyproject.toml             # Project configuration
+├── README.md                  # This file
 └── src
-    ├── app.py          # Main script
-    ├── __init__.py     # Package initialisation
+    ├── app.py                 # Main script
+    ├── __init__.py            # Package initialisation
 ```
 
 ## Disclaimer
