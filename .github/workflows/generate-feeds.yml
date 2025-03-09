@@ -1,4 +1,4 @@
-name: Update RSS Feed
+name: Generate RSS Feeds
 
 on:
   schedule:
@@ -25,13 +25,14 @@ jobs:
         python -m pip install --upgrade pip
         pip install beautifulsoup4 feedgenerator requests sendgrid
 
-    - name: Create feeds directory
-      run: mkdir -p feeds
+    - name: Ensure directories exist
+      run: |
+        mkdir -p data feeds docs
 
     - name: Generate feeds  
       run: |
-        python app.py https://bigsister.live/blog > feeds/bigsister.xml
-        python app.py https://ollama.com/blog > feeds/ollama.xml
+        python app.py https://bigsister.live/blog
+        python app.py https://ollama.com/blog
 
     - name: Commit and push RSS feed to GitHub Pages
       env:
@@ -40,16 +41,20 @@ jobs:
         # Copy generated RSS files to docs folder
         cp feeds/*xml docs/
         
+        # Set up feed headers
+        echo "/*xml" > docs/_headers
+        echo "  Content-Type: application/rss+xml; charset=utf-8" >> docs/_headers
+        
         # Commit the changes
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-        git add docs/*xml
-        git commit -m 'Update RSS feed'
+        git add data/* feeds/* docs/*xml docs/_headers
+        git commit -m 'Update RSS feeds'
         
         # Pull latest changes before pushing to avoid conflicts
         git pull --rebase origin main
         
-        # Push the changes back to the repository (main branch or gh-pages)
+        # Push the changes back to the repository
         git push https://${{ secrets.PAT }}@github.com/jljarvi/genrss.git main
 
     - name: Send email notification
