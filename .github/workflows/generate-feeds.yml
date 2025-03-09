@@ -31,8 +31,8 @@ jobs:
 
     - name: Generate feeds  
       run: |
-        python app.py https://bigsister.live/blog
-        python app.py https://ollama.com/blog
+        python src/app.py https://bigsister.live/blog
+        python src/app.py https://ollama.com/blog
 
     - name: Commit and push RSS feed to GitHub Pages
       env:
