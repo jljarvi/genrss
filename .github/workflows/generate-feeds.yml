@@ -35,8 +35,6 @@ jobs:
         python src/app.py https://ollama.com/blog
 
     - name: Commit and push RSS feed to GitHub Pages
-      env:
-        PAT: ${{ secrets.PAT }}
       run: |
         # Copy generated RSS files to docs folder
         cp feeds/*xml docs/
@@ -45,6 +43,21 @@ jobs:
         echo "/*xml" > docs/_headers
         echo "  Content-Type: application/rss+xml; charset=utf-8" >> docs/_headers
         
+    - name: Check for changes
+      id: check_changes
+      run: |
+        git diff --exit-code || echo "Changes detected"
+        if [[ $? -eq 0 ]]; then
+          echo "has_changes=false" >> $GITHUB_ENV
+        else
+          echo "has_changes=true" >> $GITHUB_ENV
+        fi
+
+    - name: Commit and push changes if there are any
+      env:
+        PAT: ${{ secrets.PAT }}
+      if: ${{ env.has_changes == 'true' }}
+      run: |
         # Commit the changes
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
@@ -53,13 +66,14 @@ jobs:
         
         # Pull latest changes before pushing to avoid conflicts
         git pull --rebase origin main
-        
+
         # Push the changes back to the repository
         git push https://${{ secrets.PAT }}@github.com/jljarvi/genrss.git main
 
     - name: Send email notification
       env:
         SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+        HAS_CHANGES: ${{ env.has_changes }}
       run: |
         python <<EOF
         import os
@@ -69,8 +83,14 @@ jobs:
         sg = sendgrid.SendGridAPIClient(api_key=os.environ.get('SENDGRID_API_KEY'))
         from_email = Email("admin@nfld.uk")
         to_email = To("jljarvi@pm.me")
-        subject = "RSS Feeds Generated"
-        content = Content("text/plain", "The RSS feeds has been successfully generated and are now live on GitHub Pages.")
+        subject = "Generous (genrss) status update"
+
+        # Conditional email content based on changes
+        if os.environ.get('HAS_CHANGES') == 'true':
+          content = Content("text/plain", "The RSS feeds have been successfully generated and are now live on GitHub Pages.")
+        else:
+          content = Content("text/plain", "The RSS feeds were checked but no new changes were made.")
+
         mail = Mail(from_email, to_email, subject, content)
 
         response = sg.client.mail.send.post(request_body=mail.get())
